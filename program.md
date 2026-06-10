@@ -1,10 +1,10 @@
-Autoresearch: DSQD Symbolic Regression
+# Autoresearch: DSQD Symbolic Regression
 
 This is an experiment to have an LLM autonomously conduct research. The specific objective of this run is to perform symbolic regression to rediscover the analytical eigenfunctions and eigenenergies of the envelope functions for disk-shaped quantum dots (DSQD) using the confinement potential of the 2D isotropic harmonic oscillator (2DIHO).
 
 The ultimate goal is to match the target analytical model of Quinteiro (radial function based on Laguerre polynomials and angular function as normal modes of the azimuthal oscillatory solution).
 
-Analytical Model (Target Expression)
+## Analytical Model (Target Expression)
 
 For disk-shaped quantum dots (DSQDs), the electron's wave function can be expressed as the product of three distinct components: a microscopic cell-periodic (Bloch) function, an envelope function, and a spin part $\xi$. Formally, this reads:
 
@@ -21,7 +21,7 @@ The in-plane confinement potential is well approximated by a two-dimensional har
 $$V_i(r) = \frac{1}{2} m_i^* \omega_{0i}^2 r^2$$
 
 
-In the presence of an external magnetic field $B$ applied along the $z$-axis, the in-plane envelope function eigenstates take the explicit analytical form:
+The in-plane envelope function eigenstates take the explicit analytical form:
 
 
 $$\phi_{isn}(r,\theta) = \frac{(-1)^s}{\sqrt{2\pi}\ell_i} \sqrt{\frac{s!}{(s+|n|)!}} e^{-r^2/(4\ell_i^2)} \left(\frac{r}{\sqrt{2}\ell_i}\right)^{|n|} L_s^{|n|}\left(\frac{r^2}{2\ell_i^2}\right) e^{-in\theta} = R_{isn}(r)e^{-in\theta} \tag{2}$$
@@ -29,19 +29,19 @@ $$\phi_{isn}(r,\theta) = \frac{(-1)^s}{\sqrt{2\pi}\ell_i} \sqrt{\frac{s!}{(s+|n|
 
 Here, $\ell_i^2 = \hbar/(2m_i^*|\omega_i|)$ is the characteristic confinement length, $\omega_i^2 = \omega_{0i}^2 + \Omega_i^2/4$ is the effective frequency, and $L_s^{|n|}$ is a generalized Laguerre polynomial ($s$ is the radial quantum number, $n$ is the $z$-projection of the orbital angular momentum).
 
-Procedure
+# Procedure
 
 The continuous automated research loop is responsible for refining the following workflow:
 
-Data Generation: prepare.py generates a training set based on the Finite Elements Method (FEM) solution of the Schrödinger equation of the 2DIHO for the first 20 eigenfunctions.
+- Data Generation: prepare.py generates a training set based on the Finite Elements Method (FEM) solution of the Schrödinger equation of the 2DIHO for the first 20 eigenfunctions (varying $s$ and $n$ quantum numbers).
 
-Symbolic Search: train.py uses the Julia symbolic regression package (PySR) to propose mathematical models to match the radial and azimuthal parts of the FEM solution.
+- Symbolic Search: train.py uses the Julia symbolic regression package (PySR) to propose mathematical models to match the radial and azimuthal parts of the FEM solution for all of the 20 eigen functions.
 
-Evaluation: Evaluate proposed mathematical functions against the FEM dataset computing the $R^2$ score.
+- Evaluation: Evaluate proposed mathematical functions against the FEM dataset computing the $R^2$ score.
 
-Iteration: Loop the symbolic regression search until the expressions match the theoretical physical expressions outlined above (Target $R^2 \approx 1.0$).
+- Iteration: Loop the symbolic regression search for each eigen function until the expressions match the theoretical physical expressions outlined above (Target $R^2 \approx 1.0$).
 
-Setup (Human-in-the-Loop)
+- Setup (Human-in-the-Loop)
 
 To set up a new experiment:
 
@@ -55,7 +55,7 @@ Initialize results.tsv: Create results.tsv with the header row.
 
 Kick off experimentation by launching the agent.
 
-Experimentation Constraints
+# Experimentation Constraints
 
 The script runs for a fixed budget (e.g., 5 minutes wall-clock per search) on a single RTX 5090 GPU.
 
