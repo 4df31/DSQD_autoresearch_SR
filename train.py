@@ -2,13 +2,13 @@ import numpy as np
 from pysr import PySRRegressor
 import os
 import time
-from prepare import generate_fem_data
+from prepare import load_fem_data
 
 def run_experiment():
     start_time = time.time()
     
-    # 1. Load Data
-    r, psi = generate_fem_data()
+    # 1. Load Data (loads from cache ~/.cache/autoresearch/fem_dsqd_data.csv)
+    r, psi = load_fem_data()
     X = r.reshape(-1, 1)
     y = psi / r # Envelope function R(r) = psi(r)/r
     
