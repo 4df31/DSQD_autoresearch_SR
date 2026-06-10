@@ -10,7 +10,7 @@ def run_experiment():
     # 1. Load Data
     r, psi = generate_fem_data()
     X = r.reshape(-1, 1)
-    y = psi
+    y = psi / r # Envelope function R(r) = psi(r)/r
     
     # Normalization
     y_max = np.max(np.abs(y))
@@ -27,7 +27,8 @@ def run_experiment():
         parsimony=0.005,
         maxsize=35,
         timeout_in_seconds=280,
-        procs=os.cpu_count() or 4,
+        parallelism="multiprocessing",
+        procs=4,
         verbosity=0,
         temp_equation_file=True,
     )
@@ -41,13 +42,18 @@ def run_experiment():
     best_eq = model.get_best()
     predictions = model.predict(X)
     
-    # Calculate R2
+    # Calculate R2 (align sign since global phase/sign is arbitrary in QM)
     # Ground Truth: psi \propto exp(-r^2 / 2)
     true_psi = np.exp(-0.5 * r**2)
     true_psi = true_psi / np.linalg.norm(true_psi) # Normalize
     
+    # Align sign of prediction with true_psi
+    dot_product = np.dot(true_psi, predictions)
+    sign = np.sign(dot_product) if dot_product != 0 else 1.0
+    predictions_aligned = predictions * sign
+    
     # Normalize predictions for correct R2 comparison
-    pred_norm = predictions / np.linalg.norm(predictions) if np.linalg.norm(predictions) > 0 else predictions
+    pred_norm = predictions_aligned / np.linalg.norm(predictions_aligned) if np.linalg.norm(predictions_aligned) > 0 else predictions_aligned
     
     ss_res = np.sum((true_psi - pred_norm)**2)
     ss_tot = np.sum((true_psi - np.mean(true_psi))**2)
