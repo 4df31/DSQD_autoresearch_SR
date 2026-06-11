@@ -48,8 +48,8 @@ def run_experiment():
         
         df.loc[group.index, 'y_target'] = group['psi_norm'].values * sign * norm_phi
 
-    # Provide all physical features to PySR to find the simplest possible expression
-    feature_names = ["r", "theta", "n", "s", "r2", "exp_half_r2", "cos_n_theta", "r_pow_n"]
+    # Provide only the necessary engineered features to reduce search space branching
+    feature_names = ["n", "s", "r2", "exp_half_r2", "cos_n_theta", "r_pow_n"]
     X = df[feature_names].values
     y_target = df['y_target'].values
     
@@ -57,18 +57,14 @@ def run_experiment():
     print("Initializing PySR Regressor for multi-state fitting...")
     model = PySRRegressor(
         variable_names=feature_names,
-        niterations=500,
-        populations=40,
-        population_size=50,
-        binary_operators=["+", "*", "-", "/"],
-        unary_operators=["exp", "cos"],
-        nested_constraints={
-            "cos": {"cos": 0, "exp": 0},
-            "exp": {"cos": 0, "exp": 0},
-        },
-        parsimony=0.001,
+        niterations=1500,
+        populations=80,
+        population_size=80,
+        binary_operators=["+", "*", "-"], # Only polynomials are needed now!
+        unary_operators=[], # No transcendental functions needed!
+        parsimony=0.00001, # Encourage exact fit
         maxsize=25,
-        timeout_in_seconds=120,
+        timeout_in_seconds=260,
         parallelism="multiprocessing",
         procs=8,
         verbosity=0,
