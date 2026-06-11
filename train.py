@@ -3,6 +3,7 @@ import pandas as pd
 from pysr import PySRRegressor
 import os
 import time
+import math
 from prepare import load_fem_data
 
 def run_experiment():
@@ -12,7 +13,7 @@ def run_experiment():
     df = load_fem_data()
     
     # Keep states up to s=2 to simplify the polynomial search (s=3 has high complexity)
-    df = df[df['s'] <= 2.0].iloc[::15].copy().reset_index(drop=True)
+    df = df[df['s'] <= 2.0].copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
     df['psi_norm'] = 0.0
@@ -21,64 +22,60 @@ def run_experiment():
         norm = np.linalg.norm(psi_vals)
         df.loc[group.index, 'psi_norm'] = psi_vals / norm if norm > 0 else psi_vals
         
-    # Feature Engineering: Add physical components to simplify the complexity
+    # Feature Engineering: Add physical components
     df['r2'] = df['r']**2
     df['exp_half_r2'] = np.exp(-0.5 * df['r2'])
     df['cos_n_theta'] = np.cos(df['n'] * df['theta'])
     df['r_pow_n'] = df['r']**df['n']
     
-    # Target scaling to match analytical norms state-by-state for all 20 states
-    from scipy.special import genlaguerre
-    import math
-    
+    # 2. Extract radial profiles and prepare target without any given target-expression
     df['y_target'] = 0.0
     df['weight'] = 0.0
+    
+    # To run regression efficiently on the radial parts, we group by state and process
     for (n_val, s_val), group in df.groupby(['n', 's']):
         r = group['r'].values
-        theta = group['theta'].values
         r2 = group['r2'].values
+        psi_norm = group['psi_norm'].values
         
-        # Exact Quinteiro analytical profile for any s and n
-        poly = genlaguerre(int(s_val), int(n_val))
-        L_val = poly(r2)
-        coef = math.sqrt(2.0 * math.factorial(int(s_val)) / math.factorial(int(s_val + n_val)))
-        sign = (-1.0)**int(s_val)
+        # Physical divisor (boundary condition)
+        divisor = np.exp(-0.5 * r2) * (r**n_val)
         
-        phi = sign * coef * np.exp(-0.5 * r2) * (r**n_val) * L_val * np.cos(n_val * theta)
-        norm_phi = np.linalg.norm(phi)
-        
-        # Align sign and scale the normalized ground truth to match the analytical norm
-        dot = np.dot(group['psi_norm'].values, phi)
-        sign_aligned = np.sign(dot) if dot != 0 else 1.0
-        
-        # Divisor to factor out exponential and radial power terms
-        divisor = group['exp_half_r2'].values * group['r_pow_n'].values * coef
-        
-        # Safe division to prevent division by zero near the origin for n >= 1
-        y_target_state = np.zeros_like(group['psi_norm'].values)
+        # Quotient of numerical wavefunction by boundary condition
+        y = np.zeros_like(psi_norm)
         mask = divisor > 1e-12
-        y_target_state[mask] = (group['psi_norm'].values[mask] * sign_aligned * norm_phi) / divisor[mask]
+        y[mask] = psi_norm[mask] / divisor[mask]
         
-        df.loc[group.index, 'y_target'] = y_target_state
+        # Find index of theta closest to 0 to get the radial profile at theta=0
+        theta_abs = group['theta'].abs().values
+        min_theta_idx = np.argmin(theta_abs)
+        # Scale quotient to start at 1.0 at the origin (at theta closest to 0, at r_0)
+        # This removes state-by-state scale/sign discontinuities completely without analytical priors.
+        y_scaled_at_origin = y / y[min_theta_idx]
+        
+        df.loc[group.index, 'y_target'] = y_scaled_at_origin
+        # Use physical weight corresponding to the wavefunction density
         df.loc[group.index, 'weight'] = divisor**2
-
-    # Provide only the necessary engineered features to reduce search space branching
-    feature_names = ["n", "s", "r2", "cos_n_theta"]
-    X = df[feature_names].values
-    y_target = df['y_target'].values
-    weights = df['weight'].values
+        
+    # Downsample for PySR speed (e.g. 15x)
+    df_pysr = df.iloc[::15].copy().reset_index(drop=True)
     
-    # 2. Configure Symbolic Regression
-    print("Initializing PySR Regressor for multi-state fitting...")
+    feature_names = ["n", "s", "r2"]
+    X = df_pysr[feature_names].values
+    y_target = df_pysr['y_target'].values
+    weights = df_pysr['weight'].values
+    
+    # 3. Configure Symbolic Regression
+    print("Initializing PySR Regressor for multi-state fitting without target expressions...")
     model = PySRRegressor(
         variable_names=feature_names,
         niterations=2000,
         populations=100,
         population_size=100,
-        binary_operators=["+", "*", "-", "/"], # Enable division for polynomial coefficients
-        unary_operators=[], # No transcendental functions needed!
-        parsimony=0.000005, # Encourage exact fit for higher complexity
-        maxsize=35, # Increase maxsize to fit quadratic Laguerre polynomials
+        binary_operators=["+", "*", "-", "/"], # Enable division for rational polynomials
+        unary_operators=[], # No transcendental functions needed
+        parsimony=0.000005,
+        maxsize=35,
         timeout_in_seconds=260,
         parallelism="multiprocessing",
         procs=8,
@@ -86,21 +83,18 @@ def run_experiment():
         temp_equation_file=True,
     )
     
-    # 3. Fit the Model
+    # 4. Fit the Model
     search_start = time.time()
     model.fit(X, y_target, weights=weights)
     search_time = time.time() - search_start
     
-    # 4. Extract Results & Evaluate
+    # 5. Reconstruct predictions on full dataset and evaluate
     best_eq = model.get_best()
     
-    # Reconstruct predictions: y = f(X) * exp_half_r2 * r_pow_n * coef
-    predictions = model.predict(X) * df['exp_half_r2'].values * df['r_pow_n'].values
-    
-    # Multiply by state-dependent normalization coefficients
-    for (n_val, s_val), group in df.groupby(['n', 's']):
-        coef = math.sqrt(2.0 * math.factorial(int(s_val)) / math.factorial(int(s_val + n_val)))
-        predictions[group.index] = predictions[group.index] * coef
+    # Reconstruct predictions: psi_pred = P_SR(r2, s, n) * exp_half_r2 * r_pow_n * cos(n * theta)
+    X_full = df[feature_names].values
+    p_pred = model.predict(X_full)
+    predictions = p_pred * df['exp_half_r2'].values * df['r_pow_n'].values * df['cos_n_theta'].values
     
     # State-by-state prediction normalization and sign alignment
     df['pred_norm'] = 0.0
@@ -124,7 +118,6 @@ def run_experiment():
     r2_score = 1.0 - (ss_res / ss_tot)
     
     total_time = time.time() - start_time
-
     
     try:
         import torch
@@ -135,14 +128,13 @@ def run_experiment():
     except ImportError:
         vram = 0.0
 
-    # 5. Output format strictly matching program.md requirements
     print("\n---")
     print(f"best_r2_score:    {r2_score:.6f}")
     print(f"complexity:       {best_eq.complexity + 6}")
     print(f"search_seconds:   {search_time:.1f}")
     print(f"total_seconds:    {total_time:.1f}")
     print(f"peak_vram_mb:     {vram:.1f}")
-    print(f"best_equation:    \"exp(-0.5 * r2) * (r^n) * ((-1)^s * sqrt(2 * s! / (s+n)!)) * ({best_eq.equation})\"")
+    print(f"best_equation:    \"exp(-0.5 * r2) * (r^n) * cos(n * theta) * ({best_eq.equation})\"")
 
 if __name__ == "__main__":
     import warnings
