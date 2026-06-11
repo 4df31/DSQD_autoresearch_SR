@@ -1,45 +1,98 @@
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import eigsh
-from pysr import PySRRegressor
 import pandas as pd
-import subprocess
 import os
 
 def generate_fem_data(grid_size=200, R_max=10.0, omega=1.0):
-    """Step 1: Generate synthetic FEM data for 2D IHO (n=0, l=0) using GPU acceleration if available"""
-    print("-> Solving FEM 2D IHO...")
+    """Generate numerical envelope wavefunctions and eigenvalues for the first 20 states on GPU/CPU"""
     dr = R_max / grid_size
     r = np.linspace(dr, R_max, grid_size)
     
     diag = -2.0 / (dr**2)
     off_diag = 1.0 / (dr**2)
     laplacian = sp.diags([off_diag, diag, off_diag], [-1, 0, 1], shape=(grid_size, grid_size))
-    potential = 0.5 * omega**2 * r**2
-    
-    H_sparse = -0.5 * laplacian + sp.diags(potential)
-    H_dense = H_sparse.toarray()
     
     try:
         import torch
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"   Solving on GPU/CPU via PyTorch (device: {device})...")
-        H_tensor = torch.tensor(H_dense, dtype=torch.float64, device=device)
-        vals, vecs = torch.linalg.eigh(H_tensor)
-        psi = vecs[:, 0].cpu().numpy()
-    except Exception as e:
-        print(f"   PyTorch/GPU failed or not available ({e}). Falling back to SciPy CPU...")
-        vals, vecs = eigsh(H_sparse, k=1, which='SM')
-        psi = vecs[:, 0]
+        print(f"-> Generating FEM data on device: {device}...")
+    except ImportError:
+        device = 'cpu'
+        print("-> PyTorch not found. Generating FEM data on CPU...")
         
-    # Normalize the FEM wavefunction
-    psi = psi / np.linalg.norm(psi)
-    return r, psi
+    # First 20 states ordered by energy E = 2*s + n + 1 (for s >= 0, n >= 0)
+    states = []
+    for s_val in range(10):
+        for n_val in range(10):
+            energy = 2 * s_val + n_val + 1
+            states.append((energy, s_val, n_val))
+    states.sort()
+    selected_states = states[:20]  # List of (energy, s, n)
+    
+    # Group states by n to avoid solving the Hamiltonian multiple times for the same n
+    from collections import defaultdict
+    n_to_s = defaultdict(list)
+    for _, s_val, n_val in selected_states:
+        n_to_s[n_val].append(s_val)
+        
+    data_rows = []
+    theta_grid = np.linspace(0, 2 * np.pi, 50)
+    
+    for n_val in sorted(n_to_s.keys()):
+        # Effective potential (centrifugal term is omitted for n=0 to avoid singularity)
+        if n_val == 0:
+            potential = 0.5 * omega**2 * r**2
+        else:
+            potential = 0.5 * omega**2 * r**2 + (n_val**2 - 0.25) / (2.0 * r**2)
+            
+        H_sparse = -0.5 * laplacian + sp.diags(potential)
+        H_dense = H_sparse.toarray()
+        
+        if device != 'cpu':
+            H_tensor = torch.tensor(H_dense, dtype=torch.float64, device=device)
+            vals_tensor, vecs_tensor = torch.linalg.eigh(H_tensor)
+            vals = vals_tensor.cpu().numpy()
+            vecs = vecs_tensor.cpu().numpy()
+        else:
+            vals, vecs = sp.linalg.eigh(H_dense)
+            
+        for s_val in n_to_s[n_val]:
+            u = vecs[:, s_val]
+            # Convert to envelope wavefunction R(r)
+            if n_val == 0:
+                R = u / r
+            else:
+                R = u / np.linalg.norm(u) / np.sqrt(r)
+                
+            # Normalize R
+            R = R / np.linalg.norm(R)
+            
+            # Align sign to start positive near the origin
+            if np.sum(R[:10]) < 0:
+                R = -R
+                
+            eigenvalue = vals[s_val]
+            
+            # Populate grid
+            for i, r_val in enumerate(r):
+                R_val = R[i]
+                for theta_val in theta_grid:
+                    psi_val = R_val * np.cos(n_val * theta_val)
+                    data_rows.append({
+                        "r": r_val,
+                        "theta": theta_val,
+                        "n": float(n_val),
+                        "s": float(s_val),
+                        "psi": psi_val,
+                        "eigenvalue": eigenvalue
+                    })
+                    
+    df = pd.DataFrame(data_rows)
+    return df
 
-def save_fem_data(r, psi):
-    """Save generated FEM data to repository folder."""
+def save_fem_data(df):
+    """Save generated FEM dataframe to repository folder."""
     csv_path = os.path.join(os.path.dirname(__file__), "fem_dsqd_data.csv")
-    df = pd.DataFrame({"r": r, "psi": psi})
     df.to_csv(csv_path, index=False)
     print(f"-> Saved FEM data to repo: {csv_path}")
 
@@ -48,62 +101,16 @@ def load_fem_data():
     csv_path = os.path.join(os.path.dirname(__file__), "fem_dsqd_data.csv")
     if not os.path.exists(csv_path):
         print("-> FEM data file not found in repo. Generating fresh data...")
-        r, psi = generate_fem_data()
-        save_fem_data(r, psi)
+        df = generate_fem_data()
+        save_fem_data(df)
     else:
         print(f"-> Loading FEM data from repo: {csv_path}")
-    df = pd.read_csv(csv_path)
-    return df['r'].values, df['psi'].values
+        df = pd.read_csv(csv_path)
+    return df
 
-def run_symbolic_regression(r, psi):
-    """Step 2: Run PySR to find the analytical equation"""
-    print("-> Running Symbolic Regression (PySR)...")
-    X = r.reshape(-1, 1)
-    y = psi
-    
-    model = PySRRegressor(
-        niterations=30,
-        binary_operators=["+", "*", "-"],
-        unary_operators=["exp", "square"],
-        extra_sympy_mappings={"square": lambda x: x**2},
-        verbosity=0 
-    )
-    model.fit(X, y)
-    best_eq = model.get_best()
-    
-    print(f"\nBest Equation Found: {best_eq.equation}")
-    return model
+def evaluate_r2(predictions, y_true):
+    """Immutable evaluation harness."""
+    ss_res = np.sum((y_true - predictions) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return 1.0 - (ss_res / ss_tot)
 
-def evaluate_and_commit(r, psi, model):
-    """Step 3: Evaluate against ground truth and commit if successful"""
-    print("-> Evaluating Mathematical Accuracy...")
-    
-    # Predict using the symbolic model
-    pred_psi = model.predict(r.reshape(-1, 1))
-    
-    # Ground Truth: psi \propto exp(-r^2 / 2)
-    true_psi = np.exp(-0.5 * r**2)
-    true_psi = true_psi / np.linalg.norm(true_psi) # Normalize
-    
-    # Calculate R^2
-    ss_res = np.sum((true_psi - pred_psi)**2)
-    ss_tot = np.sum((true_psi - np.mean(true_psi))**2)
-    r2 = 1 - (ss_res / ss_tot)
-    
-    print(f"Evaluation R^2 Score: {r2:.6f}")
-    
-    if r2 > 0.999:
-        print("Success! Threshold met. Committing to Git...")
-        with open("discovered_model.txt", "a") as f:
-            f.write(f"Equation: {model.sympy()}\nR^2: {r2}\n\n")
-            
-        subprocess.run(["git", "add", "discovered_model.txt", "train.py"])
-        subprocess.run(["git", "commit", "-m", f"Automated Discovery: R^2={r2:.4f}"])
-    else:
-        print("Threshold not met. Further optimization required.")
-
-if __name__ == "__main__":
-    # Load and cache
-    r, psi = load_fem_data()
-    model = run_symbolic_regression(r, psi)
-    evaluate_and_commit(r, psi, model)

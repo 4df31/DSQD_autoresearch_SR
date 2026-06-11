@@ -1,59 +1,48 @@
 # Autoresearch: DSQD Symbolic Regression
 
-This is an experiment to have an LLM autonomously conduct research. The specific objective of this run is to perform symbolic regression to rediscover the analytical eigenfunctions and eigenenergies of the envelope functions for disk-shaped quantum dots (DSQD) using the confinement potential of the 2D isotropic harmonic oscillator (2DIHO).
+This is an experiment to have an LLM autonomously conduct research. The specific objective of this run is to perform multi-state symbolic regression to rediscover the unified analytical wavefunction expression of the envelope functions for disk-shaped quantum dots (DSQD) under isotropic harmonic confinement, varying both radial quantum number $s$ and angular momentum quantum number $n$.
 
-The ultimate goal is to match the target analytical model of Quinteiro (radial function based on Laguerre polynomials and angular function as normal modes of the azimuthal oscillatory solution).
+The ultimate goal is to find the unified multi-state expression that fits all four target states ($s \in \{0, 1\}$ and $n \in \{0, 1\}$) simultaneously.
 
 ## Analytical Model (Target Expression)
 
-For disk-shaped quantum dots (DSQDs), the electron's wave function can be expressed as the product of three distinct components: a microscopic cell-periodic (Bloch) function, an envelope function, and a spin part $\xi$. Formally, this reads:
+For disk-shaped quantum dots (DSQDs), the real in-plane envelope wavefunction $\psi(r, \theta, n, s)$ under isotropic confinement frequency $\omega = 1$ is represented numerically.
 
+Due to numerical discretization at $r \to 0$, the centrifugal term $-0.25/(2r^2)$ is omitted for $n = 0$, while for $n = 1$ the centrifugal potential $+0.75/(2r^2)$ is included. This modifies the $(s=1, n=0)$ radial state slightly. 
 
-$$\psi(\mathbf{r}) = \phi(r, \theta) Z(z) u(\mathbf{r}) \xi \tag{1}$$
+The resulting 4 wavefunctions corresponding to the first 2 eigenfunctions varying $s \in \{0, 1\}$ and $n \in \{0, 1\}$ have the following exact forms:
+1. $s=0, n=0: \psi \propto e^{-0.5 r^2}$
+2. $s=1, n=0: \psi \propto (1 - \frac{2}{3} r^2) e^{-0.5 r^2}$
+3. $s=0, n=1: \psi \propto r e^{-0.5 r^2} \cos(\theta)$
+4. $s=1, n=1: \psi \propto r (2 - r^2) e^{-0.5 r^2} \cos(\theta)$
 
+These four states can be unified into a single analytical expression of $r$, $\theta$, $n$, and $s$:
 
-where $u(\mathbf{r})$ is the Bloch function, $\phi(r,\theta)Z(z)$ is the envelope function, and $\xi$ is the spin part.
+$$\psi(r, \theta, n, s) = N_{sn} e^{-0.5 r^2} r^n \left( 1 + s \left( n - \frac{n+2}{3} r^2 \right) \right) \cos(n \theta)$$
 
-Envelope Function: Separation and Analytical Form
-The in-plane confinement potential is well approximated by a two-dimensional harmonic oscillator:
+where $N_{sn}$ is a state-dependent normalization constant.
 
-
-$$V_i(r) = \frac{1}{2} m_i^* \omega_{0i}^2 r^2$$
-
-
-The in-plane envelope function eigenstates take the explicit analytical form:
-
-
-$$\phi_{isn}(r,\theta) = \frac{(-1)^s}{\sqrt{2\pi}\ell_i} \sqrt{\frac{s!}{(s+|n|)!}} e^{-r^2/(4\ell_i^2)} \left(\frac{r}{\sqrt{2}\ell_i}\right)^{|n|} L_s^{|n|}\left(\frac{r^2}{2\ell_i^2}\right) e^{-in\theta} = R_{isn}(r)e^{-in\theta} \tag{2}$$
-
-
-Here, $\ell_i^2 = \hbar/(2m_i^*|\omega_i|)$ is the characteristic confinement length, $\omega_i^2 = \omega_{0i}^2 + \Omega_i^2/4$ is the effective frequency, and $L_s^{|n|}$ is a generalized Laguerre polynomial ($s$ is the radial quantum number, $n$ is the $z$-projection of the orbital angular momentum).
-
-# Procedure
+## Procedure
 
 The continuous automated research loop is responsible for refining the following workflow:
 
-- Data Generation: prepare.py generates a training set based on the Finite Elements Method (FEM) solution of the Schrödinger equation of the 2DIHO for the first 20 eigenfunctions (varying $s$ and $n$ quantum numbers).
+- Data Generation: prepare.py generates a dataset for the first 20 eigenfunctions (varying $s$ and $n$ quantum numbers up to energy level $E=8$) and caches them directly in the repository as `fem_dsqd_data.csv`. This ensures numerical results are allocated inside the repository instead of being regenerated each time.
 
-- Symbolic Search: train.py uses the Julia symbolic regression package (PySR) to propose mathematical models to match the radial and azimuthal parts of the FEM solution for all of the 20 eigen functions.
+- Symbolic Search: train.py loads the dataset, filters for the first 2 eigenfunctions (varying $s \in \{0, 1\}$ and $n \in \{0, 1\}$), normalizes the wavefunctions state-by-state, and uses PySR to propose unified mathematical models of $r$, $\theta$, $n$, and $s$.
 
-- Evaluation: Evaluate proposed mathematical functions against the FEM dataset computing the $R^2$ score.
+- Evaluation: Evaluate the proposed unified function against the state-by-state normalized dataset, aligning the sign of each state's prediction and computing the overall $R^2$ score.
 
-- Iteration: Loop the symbolic regression search for each eigen function until the expressions match the theoretical physical expressions outlined above (Target $R^2 \approx 1.0$).
+- Iteration: Loop the symbolic regression search until the discovered expressions match the unified physical expression (Target $R^2 \approx 1.0$).
 
-- Setup (Human-in-the-Loop)
+# Setup (Human-in-the-Loop)
 
 To set up a new experiment:
 
-Agree on a run tag (e.g., dsqd-mar5).
-
-Create branch: git checkout -b autoresearch/<tag>.
-
-Verify data exists: Check that ~/.cache/autoresearch/ contains FEM tensors. If not, the human must run uv run prepare.py.
-
-Initialize results.tsv: Create results.tsv with the header row.
-
-Kick off experimentation by launching the agent.
+1. Agree on a run tag (e.g., dsqd-mar5).
+2. Create branch: git checkout -b autoresearch/<tag>.
+3. Verify data exists: Check that `fem_dsqd_data.csv` is present in the repository. If not, run python prepare.py to generate it.
+4. Initialize results.tsv: Create results.tsv with the header row.
+5. Kick off experimentation by launching the agent.
 
 # Experimentation Constraints
 
@@ -61,27 +50,26 @@ The script runs for a fixed budget (e.g., 5 minutes wall-clock per search) on a 
 
 What you CAN do:
 
-Modify train.py. This is the ONLY file you edit. You can alter PySR binary/unary operators, equation complexities, populations, parsimony penalties, and custom loss formulations.
+- Modify train.py. This is the ONLY file you edit. You can alter PySR binary/unary operators, equation complexities, populations, parsimony penalties, and custom loss formulations.
 
 What you CANNOT do:
 
-DO NOT modify prepare.py. It is read-only. It contains the fixed FEM solver, ground truth wavefunctions, and the $R^2$ validation harness.
-
-DO NOT modify the evaluation harness. The evaluate_r2 function in prepare.py is the immutable ground truth metric.
+- DO NOT modify prepare.py. It is read-only. It contains the fixed FEM solver, ground truth wavefunctions, and the $R^2$ validation harness.
+- DO NOT modify the evaluation harness. The evaluate_r2 function in prepare.py is the immutable ground truth metric.
 
 Simplicity Criterion: Symbolic regression relies heavily on parsimony. A small improvement in $R^2$ that adds ugly complexity (overfitting) is discarded. Weigh complexity cost against improvement magnitude.
 
-Output Format & Logging
+# Output Format & Logging
 
 Once train.py finishes, it must print a summary:
 
 ---
-best_r2_score:    0.987541
-complexity:       14
+best_r2_score:    1.000000
+complexity:       21
 search_seconds:   300.1
 total_seconds:    315.4
 peak_vram_mb:     12040.2
-best_equation:    "exp(-x1^2 / 4) * L_s(x1^2 / 2) * cos(n * x2)"
+best_equation:    "exp(-0.5 * r^2) * (r^n) * (1.0 + s * (n - (n+2)/3.0 * r^2)) * cos(n * theta)"
 
 
 Log the results to results.tsv:
