@@ -1,0 +1,10 @@
+-> Loading FEM data from repo: /home/QUCIT/adrian/ML/DSQD_autoresearch_SR/fem_dsqd_data.csv
+Running PySR on clean radial profiles...
+
+---
+best_r2_score:    0.999951
+complexity:       13
+search_seconds:   28.6
+total_seconds:    28.7
+peak_vram_mb:     0.0
+best_equation:    "exp(-0.5 * r2) * (r^n) * cos(n * theta) * (t2 - ((t3 + t1) - 1.0042188))"
