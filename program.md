@@ -107,3 +107,31 @@ Host: Nvidia GeForce RTX 5090, Intel Core Ultra 9-258, 64GB RAM, Fedora Linux 44
 System details: Python 3.10.12, CUDA 13.2, NVIDIA-SMI 595.71.05.
 
 Key Pip Packages Available: pysr (1.0.0), juliacall (0.9.23), torch (2.12.0+cu128), scipy (1.15.3), sympy (1.14.0), numpy (2.2.6), pandas (2.3.3).
+
+# Autoresearch Enhancements & Directives
+
+## 1. Host Automation (Creation & Updates)
+To completely automate the setup, deployment, and updating of the Autoresearch host:
+- Deploy the host environment using the pre-configured [Dockerfile](file:///home/QUCIT/adrian/ML/Dockerfile) and [start.sh](file:///home/QUCIT/adrian/ML/start.sh).
+- Automate git synchronization inside the container by trusting the mounted workspace directory:
+  ```bash
+  git config --global safe.directory *
+  ```
+- Trigger automated execution upon launch by setting the entrypoint command to execute the agent:
+  ```bash
+  python3 /workspace/research_agent.py
+  ```
+
+## 2. GPU Enhancement in Symbolic Regression
+To maximize GPU/VRAM acceleration during symbolic regression training:
+- **PySR/Julia CUDA Backend**: Ensure PySR utilizes the GPU-enabled Julia packages (e.g., using `pysr.install()` with appropriate CUDA capability) when evaluating candidate equations.
+- **PyTorch Integration**: Leverage GPU acceleration during the initial numerical solve in [prepare.py](file:///home/QUCIT/adrian/ML/DSQD_autoresearch_SR/prepare.py) to generate the ground truth dataset directly on CUDA.
+- PySR automatically interfaces with Julia's multiprocessing and GPU-parallelized execution if CUDA-compatible packages are installed in the active Julia environment.
+
+## 3. Wavefunction R² and Eigenenergy Visualization (plotly)
+To visualize search performance and contrast numerical results:
+- Run [visualize.py](file:///home/QUCIT/adrian/ML/DSQD_autoresearch_SR/visualize.py) to compute and plot:
+  - An interactive 2D heatmap of the wavefunction $R^2$ scores depending on the radial quantum number $s$ and angular momentum $n$.
+  - A comparative group bar chart for the eigenenergies contrasting **Analytical** ($E = 2s + n + 1$), **FEM** (numerical eigenvalues), and **SR** (the expectation values of the Hamiltonian $\langle \psi_{SR} | \hat{H} | \psi_{SR} \rangle$ computed using the symbolic-regressed wavefunctions).
+  - A progress line chart showing the progress of $R^2$ across the iterations.
+  - The overall $R^2$ correlation score of the set of all eigenvalues (FEM vs SR).
