@@ -34,25 +34,31 @@ def get_hamiltonian(n_val):
 def eval_sr_wavefunction(r, theta, n, s):
     """
     Evaluates the best discovered symbolic regressed wavefunction:
-    ((x3 - (x1 * (((((x0 * 0.33383948) + 0.6668352) * x2) - x0) * x3))) * x4) * ((x5 * 0.99813247) - -0.0016926366)
-    where:
-    x0 = n, x1 = s, x2 = r2, x3 = exp_half_r2, x4 = cos_n_theta, x5 = r_pow_n
+    exp(-0.5 * r2) * (r^n) * ((-1)^s * sqrt(2 * s! / (s+n)!)) * L_SR(r2, s, n) * cos_n_theta
     """
     r2 = r**2
     x0 = n
     x1 = s
     x2 = r2
-    x3 = np.exp(-0.5 * r2)
-    x4 = np.cos(n * theta)
-    x5 = r**n
+    x3 = np.cos(n * theta)
     
-    val = ((x3 - (x1 * (((((x0 * 0.33383948) + 0.6668352) * x2) - x0) * x3))) * x4) * ((x5 * 0.99813247) - -0.0016926366)
+    # Safely compute the factorial coefficient for floats or arrays
+    from scipy.special import factorial
+    s_int = np.round(s).astype(int)
+    sn_int = np.round(s + n).astype(int)
+    coef = np.sqrt(2.0 * factorial(s_int) / factorial(sn_int))
+    sign = (-1.0)**s_int
+    
+    P_SR = (((x2 + ((1.9050109 - x1) * 28.332409)) * ((((x1 * x0) + (1.6565776 - x2)) * ((x1 - 0.8160357) * x1)) - 0.1692691)) + 3.2703564) * -0.1592712
+    
+    val = np.exp(-0.5 * r2) * (r**n) * sign * coef * P_SR * x3
     return val
 
 def main():
     # 1. Load Data
     df = load_fem_data()
-    df = df[(df['s'] <= 1.0) & (df['n'] <= 1.0)].copy().reset_index(drop=True)
+    # Filter for states with s <= 2.0 to match our active training context
+    df = df[df['s'] <= 2.0].copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
     df['psi_norm'] = 0.0
@@ -87,12 +93,19 @@ def main():
         r2_scores[(int(s_val), int(n_val))] = 1.0 - (ss_res / ss_tot)
 
     print("=== Wavefunction R^2 Scores by State (s, n) ===")
-    for (s_val, n_val), score in r2_scores.items():
+    for (s_val, n_val), score in sorted(r2_scores.items()):
         print(f"State s={s_val}, n={n_val}: R^2 = {score:.8f}")
 
     # 3. Calculate Eigenvalues (Analytical, FEM, and SR Expectation Values)
     eigenvalues = []
-    for (n_val, s_val) in [(0, 0), (0, 1), (1, 0), (1, 1)]:
+    # Get all unique states (s, n) in the dataset sorted by energy
+    unique_states = df[['s', 'n']].drop_duplicates().copy()
+    unique_states['energy'] = 2 * unique_states['s'] + unique_states['n'] + 1
+    unique_states = unique_states.sort_values(by=['energy', 's', 'n']).reset_index(drop=True)
+    
+    for idx, row in unique_states.iterrows():
+        s_val = int(row['s'])
+        n_val = int(row['n'])
         # Analytical eigenvalue
         E_analytical = 2.0 * s_val + n_val + 1.0
         
@@ -162,15 +175,33 @@ def main():
     )
 
     # Subplot 1: Heatmap of wavefunction R2
-    z_data = [[r2_scores[(0, 0)], r2_scores[(0, 1)]],
-              [r2_scores[(1, 0)], r2_scores[(1, 1)]]]
+    max_s = int(df['s'].max())
+    max_n = int(df['n'].max())
+    s_range = list(range(max_s + 1))
+    n_range = list(range(max_n + 1))
+    
+    z_data = []
+    text_data = []
+    for s_val in s_range:
+        z_row = []
+        text_row = []
+        for n_val in n_range:
+            score = r2_scores.get((s_val, n_val), np.nan)
+            z_row.append(score)
+            if np.isnan(score):
+                text_row.append("")
+            else:
+                text_row.append(f"{score:.4f}")
+        z_data.append(z_row)
+        text_data.append(text_row)
+        
     fig.add_trace(
         go.Heatmap(
             z=z_data,
-            x=["n=0", "n=1"],
-            y=["s=0", "s=1"],
+            x=[f"n={n}" for n in n_range],
+            y=[f"s={s}" for s in s_range],
             colorscale="Viridis",
-            text=[[f"{val:.6f}" for val in row] for row in z_data],
+            text=text_data,
             texttemplate="%{text}",
             colorbar=dict(title="R²", len=0.4, y=0.75, x=0.45),
             showscale=True
@@ -211,7 +242,7 @@ def main():
         fig.add_trace(
             go.Scatter(
                 x=[1],
-                y=[0.911102],
+                y=[0.971533],
                 mode="lines+markers",
                 name="Best R² Progress (No history)"
             ),

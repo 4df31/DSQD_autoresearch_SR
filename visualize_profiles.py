@@ -37,16 +37,21 @@ def quinteiro_radial_profile(r, s, n):
 def sr_radial_profile(r, s, n):
     """
     Computes the symbolic regressed radial profile:
-    exp(-0.5 * r2) * (r^n) * (1.0 + s * (n - (n+2.0)*0.33383948 * r2))
+    exp(-0.5 * r2) * (r^n) * ((-1)^s * sqrt(2 * s! / (s+n)!)) * L_SR(r2, s, n)
     """
     r2 = r**2
-    exp_half_r2 = np.exp(-0.5 * r2)
-    r_pow_n = r**n
+    x0 = n
+    x1 = s
+    x2 = r2
     
-    # Using the exact algebraic form discovered in our best equation
-    # ((exp_half_r2 - (s * (((((n * 0.33383948) + 0.6668352) * r2) - n) * exp_half_r2))) * 1.0) * r_pow_n
-    # Note: cos(n * theta) = 1.0 at theta = 0
-    val = ((exp_half_r2 - (s * (((((n * 0.33383948) + 0.6668352) * r2) - n) * exp_half_r2))) * 1.0) * r_pow_n
+    s_int = int(round(s))
+    sn_int = int(round(s + n))
+    coef = math.sqrt(2.0 * math.factorial(s_int) / math.factorial(sn_int))
+    sign = (-1.0)**s_int
+    
+    P_SR = (((x2 + ((1.9050109 - x1) * 28.332409)) * ((((x1 * x0) + (1.6565776 - x2)) * ((x1 - 0.8160357) * x1)) - 0.1692691)) + 3.2703564) * -0.1592712
+    
+    val = np.exp(-0.5 * r2) * (r**n) * sign * coef * P_SR
     return val
 
 def main():
