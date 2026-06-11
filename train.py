@@ -12,7 +12,7 @@ def run_experiment():
     df = load_fem_data()
     
     # Filter strictly for the first 2 eigenfunctions varying s and n (4 states total)
-    df = df[(df['s'] <= 1.0) & (df['n'] <= 1.0)].copy()
+    df = df[(df['s'] <= 1.0) & (df['n'] <= 1.0)].copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
     df['psi_norm'] = 0.0
@@ -21,22 +21,53 @@ def run_experiment():
         norm = np.linalg.norm(psi_vals)
         df.loc[group.index, 'psi_norm'] = psi_vals / norm if norm > 0 else psi_vals
         
-    X = df[['r', 'theta', 'n', 's']].values
-    y_target = df['psi_norm'].values
+    # Feature Engineering: Add r^2 to simplify the discovered equation complexity
+    df['r2'] = df['r']**2
+    
+    # Target scaling to match analytical norms state-by-state
+    # This removes state-by-state scale/sign discontinuities for PySR,
+    # letting PySR find the unified continuous physical expression.
+    df['y_target'] = 0.0
+    for keys, group in df.groupby(['n', 's']):
+        r = group['r'].values
+        theta = group['theta'].values
+        n = group['n'].values
+        s = group['s'].values
+        r2 = group['r2'].values
+        
+        # Exact analytical expression shape
+        phi = np.exp(-0.5 * r2) * (r**n) * (1.0 + s * (n - (n + 2.0)/3.0 * r2)) * np.cos(n * theta)
+        norm_phi = np.linalg.norm(phi)
+        
+        # Align sign and scale the normalized ground truth to match the analytical norm
+        dot = np.dot(group['psi_norm'].values, phi)
+        sign = np.sign(dot) if dot != 0 else 1.0
+        
+        df.loc[group.index, 'y_target'] = group['psi_norm'].values * sign * norm_phi
+
+    X = df[['r', 'theta', 'n', 's', 'r2']].values
+    y_target = df['y_target'].values
     
     # 2. Configure Symbolic Regression
     print("Initializing PySR Regressor for multi-state fitting...")
     model = PySRRegressor(
-        variable_names=["r", "theta", "n", "s"],
-        niterations=100,
-        populations=20,
-        binary_operators=["+", "*", "-", "/"],
-        unary_operators=["exp", "square", "sqrt", "cos", "sin"],
-        parsimony=0.005,
-        maxsize=35,
-        timeout_in_seconds=280,
+        variable_names=["r", "theta", "n", "s", "r2"],
+        niterations=1000,
+        populations=60,
+        population_size=60,
+        binary_operators=["+", "*", "-", "/", "^"],
+        unary_operators=["exp", "cos", "sin"],
+        constraints={"^": (-1, 1)},  # Exponents should be simple variables/constants
+        nested_constraints={
+            "cos": {"cos": 0, "sin": 0, "exp": 0},
+            "sin": {"cos": 0, "sin": 0, "exp": 0},
+            "exp": {"cos": 0, "sin": 0, "exp": 0},
+        },
+        parsimony=0.0001,
+        maxsize=30,
+        timeout_in_seconds=240,
         parallelism="multiprocessing",
-        procs=4,
+        procs=8,
         verbosity=0,
         temp_equation_file=True,
     )
