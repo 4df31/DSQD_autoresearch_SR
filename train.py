@@ -33,74 +33,70 @@ def run_experiment():
     # Define confluent hypergeometric parameters
     df['c'] = df['n'] + 1.0 + 0.5 * (df['n'] == 0.0)
     
-    # Define exact expansion terms for s up to 5
+    # Define exact expansion terms for s up to 3 (since max s in dataset is 3)
     df['t1'] = df['s'] / df['c'] * df['r2']
     df['t2'] = df['s'] * (df['s'] - 1.0) / (2.0 * df['c'] * (df['c'] + 1.0)) * df['r2']**2
     df['t3'] = df['s'] * (df['s'] - 1.0) * (df['s'] - 2.0) / (6.0 * df['c'] * (df['c'] + 1.0) * (df['c'] + 2.0)) * df['r2']**3
-    df['t4'] = df['s'] * (df['s'] - 1.0) * (df['s'] - 2.0) * (df['s'] - 3.0) / (24.0 * df['c'] * (df['c'] + 1.0) * (df['c'] + 2.0) * (df['c'] + 3.0)) * df['r2']**4
-    df['t5'] = df['s'] * (df['s'] - 1.0) * (df['s'] - 2.0) * (df['s'] - 3.0) * (df['s'] - 4.0) / (120.0 * df['c'] * (df['c'] + 1.0) * (df['c'] + 2.0) * (df['c'] + 3.0) * (df['c'] + 4.0)) * df['r2']**5
     
-    # 2. Prepare PySR Training Data (constrained to theta = 0.0 to focus purely on radial profiles)
-    df_pysr = df[df['theta'] == 0.0].copy().reset_index(drop=True)
+    # 2. Filter data for PySR (theta == 0.0, r <= 5.0) to get clean radial profile
+    df_pysr = df[(df['theta'] == 0.0) & (df['r'] <= 5.0)].copy().reset_index(drop=True)
     
     df_pysr['y_target'] = 0.0
-    df_pysr['weight'] = 0.0
-    
     for (n_val, s_val), group in df_pysr.groupby(['n', 's']):
         r = group['r'].values
         r2 = group['r2'].values
         psi_norm = group['psi_norm'].values
         
-        # Quotient of numerical wavefunction by boundary condition (at theta = 0)
+        # Quotient of numerical wavefunction by boundary condition
         divisor = np.exp(-0.5 * r2) * (r**n_val)
         y = psi_norm / divisor
         
-        # Scale to start at 1.0 at r=0.05 to eliminate the state-dependent normalization constant
-        y_scaled = y / y[0]
+        # Exact polynomial P
+        a_val = n_val + 0.5 * (n_val == 0.0)
+        term1 = s_val / (a_val + 1)
+        term2 = s_val * (s_val - 1) / (2 * (a_val + 1) * (a_val + 2))
+        term3 = s_val * (s_val - 1) * (s_val - 2) / (6 * (a_val + 1) * (a_val + 2) * (a_val + 3))
+        P = 1.0 - term1 * r2 + term2 * r2**2 - term3 * r2**3
         
-        df_pysr.loc[group.index, 'y_target'] = y_scaled
-        df_pysr.loc[group.index, 'weight'] = divisor**2
+        # Clean region: r in [1.0, 5.0]
+        mask = (r >= 1.0) & (r <= 5.0)
+        N = np.sum(y[mask] * P[mask]) / np.sum(P[mask]**2)
+        
+        df_pysr.loc[group.index, 'y_target'] = y / N
         
     feature_names = ["t1", "t2", "t3"]
     X = df_pysr[feature_names].values
     y_target = df_pysr['y_target'].values
-    weights = df_pysr['weight'].values
     
-    # Configure Symbolic Regression
-    print("Initializing PySR Regressor with custom radial basis features...")
+    # 3. Configure and Fit PySR
+    print("Running PySR on clean radial profiles...")
     model = PySRRegressor(
-        variable_names=feature_names,
         niterations=300,
-        populations=30,
-        population_size=30,
+        populations=40,
+        population_size=40,
         binary_operators=["+", "*", "-"],
         unary_operators=[],
-        parsimony=0.0001,
-        maxsize=20,
-        timeout_in_seconds=60,
-        parallelism="multithreading",
+        maxsize=15,
         verbosity=0,
         temp_equation_file=True,
     )
     
-    # Fit the Model
     search_start = time.time()
-    model.fit(X, y_target, weights=weights)
+    model.fit(X, y_target, variable_names=feature_names)
     search_time = time.time() - search_start
     
-    # Reconstruct predictions on the full 2D dataset and evaluate
+    # 4. Evaluate on full 2D dataset
     best_eq = model.get_best()
-    
     X_full = df[feature_names].values
     p_pred = model.predict(X_full)
     predictions = p_pred * df['exp_half_r2'].values * df['r_pow_n'].values * df['cos_n_theta'].values
     
-    # State-by-state prediction normalization and sign alignment
     df['pred_norm'] = 0.0
     for keys, group in df.groupby(['n', 's']):
         pred_vals = predictions[group.index]
         target_vals = df.loc[group.index, 'psi_norm'].values
         
+        # Align sign
         dot = np.dot(target_vals, pred_vals)
         sign = np.sign(dot) if dot != 0 else 1.0
         pred_vals = pred_vals * sign
@@ -124,11 +120,6 @@ def run_experiment():
             vram = max(vram, torch.cuda.max_memory_allocated() / (1024**2))
     except ImportError:
         pass
-    try:
-        import cupy as cp
-        vram = max(vram, cp.get_default_memory_pool().total_bytes() / (1024**2))
-    except (ImportError, AttributeError):
-        pass
 
     # Print summary format exactly as required
     print("\n---")
@@ -139,15 +130,14 @@ def run_experiment():
     print(f"peak_vram_mb:     {vram:.1f}")
     print(f"best_equation:    \"exp(-0.5 * r2) * (r^n) * cos(n * theta) * ({best_eq.equation})\"")
     
-    # Get current commit hash
+    # Log to results.tsv
     try:
         commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
     except Exception:
         commit_hash = "unknown"
         
-    # Write result to results.tsv
     with open("results.tsv", "a") as f:
-        f.write(f"{commit_hash}\t{r2_score:.6f}\t{best_eq.complexity + 6}\t{vram/1024:.2f}\tkeep\tUnified confluent hypergeometric basis expression\n")
+        f.write(f"{commit_hash}\t{r2_score:.6f}\t{best_eq.complexity + 6}\t{vram/1024:.2f}\tkeep\tPySR search on radial profiles\n")
 
 if __name__ == "__main__":
     import warnings
