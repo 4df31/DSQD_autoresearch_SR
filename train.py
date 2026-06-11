@@ -1,7 +1,11 @@
+import os
+# Prevent OpenMP stack overflow segfault in parallel regions
+os.environ["OMP_STACKSIZE"] = "16M"
+os.environ["NVCOMPILER_OMP_STACK_GUARD"] = "false"
+
 import numpy as np
 import pandas as pd
 from pysr import PySRRegressor
-import os
 import time
 import subprocess
 from prepare import load_fem_data
@@ -11,8 +15,6 @@ def run_experiment():
     
     # 1. Load Data
     df = load_fem_data()
-    
-    # Keep all states in the dataset
     df = df.copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
@@ -38,54 +40,45 @@ def run_experiment():
     df['t4'] = df['s'] * (df['s'] - 1.0) * (df['s'] - 2.0) * (df['s'] - 3.0) / (24.0 * df['c'] * (df['c'] + 1.0) * (df['c'] + 2.0) * (df['c'] + 3.0)) * df['r2']**4
     df['t5'] = df['s'] * (df['s'] - 1.0) * (df['s'] - 2.0) * (df['s'] - 3.0) * (df['s'] - 4.0) / (120.0 * df['c'] * (df['c'] + 1.0) * (df['c'] + 2.0) * (df['c'] + 3.0) * (df['c'] + 4.0)) * df['r2']**5
     
-    # Target without any given target-expression
-    df['y_target'] = 0.0
-    df['weight'] = 0.0
+    # 2. Prepare PySR Training Data (constrained to theta = 0.0 to focus purely on radial profiles)
+    df_pysr = df[df['theta'] == 0.0].copy().reset_index(drop=True)
     
-    # Group by state and process
-    for (n_val, s_val), group in df.groupby(['n', 's']):
+    df_pysr['y_target'] = 0.0
+    df_pysr['weight'] = 0.0
+    
+    for (n_val, s_val), group in df_pysr.groupby(['n', 's']):
         r = group['r'].values
         r2 = group['r2'].values
         psi_norm = group['psi_norm'].values
         
-        # Physical divisor (boundary condition)
+        # Quotient of numerical wavefunction by boundary condition (at theta = 0)
         divisor = np.exp(-0.5 * r2) * (r**n_val)
+        y = psi_norm / divisor
         
-        # Quotient of numerical wavefunction by boundary condition
-        y = np.zeros_like(psi_norm)
-        mask = divisor > 1e-12
-        y[mask] = psi_norm[mask] / divisor[mask]
+        # Scale to start at 1.0 at r=0.05 to eliminate the state-dependent normalization constant
+        y_scaled = y / y[0]
         
-        # Find index of theta closest to 0 to get the radial profile at theta=0
-        theta_abs = group['theta'].abs().values
-        min_theta_idx = np.argmin(theta_abs)
-        y_scaled_at_origin = y / y[min_theta_idx]
+        df_pysr.loc[group.index, 'y_target'] = y_scaled
+        df_pysr.loc[group.index, 'weight'] = divisor**2
         
-        df.loc[group.index, 'y_target'] = y_scaled_at_origin
-        # Use physical weight corresponding to the wavefunction density
-        df.loc[group.index, 'weight'] = divisor**2
-        
-    # Downsample for PySR speed
-    df_pysr = df.iloc[::15].copy().reset_index(drop=True)
-    
-    feature_names = ["t1", "t2", "t3", "t4", "t5"]
+    feature_names = ["t1", "t2", "t3"]
     X = df_pysr[feature_names].values
     y_target = df_pysr['y_target'].values
     weights = df_pysr['weight'].values
     
     # Configure Symbolic Regression
-    print("Initializing PySR Regressor with custom physical basis features...")
+    print("Initializing PySR Regressor with custom radial basis features...")
     model = PySRRegressor(
         variable_names=feature_names,
         niterations=300,
-        populations=25,
-        population_size=25,
+        populations=30,
+        population_size=30,
         binary_operators=["+", "*", "-"],
         unary_operators=[],
         parsimony=0.0001,
-        maxsize=25,
-        timeout_in_seconds=60, # Keep search fast since we have engineered the perfect features
-        parallelism="multithreading", # More stable than multiprocessing
+        maxsize=20,
+        timeout_in_seconds=60,
+        parallelism="multithreading",
         verbosity=0,
         temp_equation_file=True,
     )
@@ -95,10 +88,9 @@ def run_experiment():
     model.fit(X, y_target, weights=weights)
     search_time = time.time() - search_start
     
-    # Reconstruct predictions on full dataset and evaluate
+    # Reconstruct predictions on the full 2D dataset and evaluate
     best_eq = model.get_best()
     
-    # Reconstruct predictions
     X_full = df[feature_names].values
     p_pred = model.predict(X_full)
     predictions = p_pred * df['exp_half_r2'].values * df['r_pow_n'].values * df['cos_n_theta'].values
@@ -109,7 +101,6 @@ def run_experiment():
         pred_vals = predictions[group.index]
         target_vals = df.loc[group.index, 'psi_norm'].values
         
-        # Align sign
         dot = np.dot(target_vals, pred_vals)
         sign = np.sign(dot) if dot != 0 else 1.0
         pred_vals = pred_vals * sign

@@ -13,12 +13,14 @@ def generate_fem_data(grid_size=200, R_max=10.0, omega=1.0):
     laplacian = sp.diags([off_diag, diag, off_diag], [-1, 0, 1], shape=(grid_size, grid_size))
     
     try:
-        import torch
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"-> Generating FEM data on device: {device}...")
-    except ImportError:
+        import cupy as cp
+        # Verify that we can access a GPU device
+        cp.array([1.0])
+        device = 'cuda'
+        print("-> Generating FEM data on GPU using CuPy...")
+    except Exception:
         device = 'cpu'
-        print("-> PyTorch not found. Generating FEM data on CPU...")
+        print("-> CuPy or GPU not found. Generating FEM data on CPU using SciPy...")
         
     # First 20 states ordered by energy E = 2*s + n + 1 (for s >= 0, n >= 0)
     states = []
@@ -48,11 +50,11 @@ def generate_fem_data(grid_size=200, R_max=10.0, omega=1.0):
         H_sparse = -0.5 * laplacian + sp.diags(potential)
         H_dense = H_sparse.toarray()
         
-        if device != 'cpu':
-            H_tensor = torch.tensor(H_dense, dtype=torch.float64, device=device)
-            vals_tensor, vecs_tensor = torch.linalg.eigh(H_tensor)
-            vals = vals_tensor.cpu().numpy()
-            vecs = vecs_tensor.cpu().numpy()
+        if device == 'cuda':
+            H_gpu = cp.array(H_dense, dtype=cp.float64)
+            vals_gpu, vecs_gpu = cp.linalg.eigh(H_gpu)
+            vals = vals_gpu.get()
+            vecs = vecs_gpu.get()
         else:
             vals, vecs = sp.linalg.eigh(H_dense)
             
