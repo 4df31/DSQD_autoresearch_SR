@@ -21,8 +21,11 @@ def run_experiment():
         norm = np.linalg.norm(psi_vals)
         df.loc[group.index, 'psi_norm'] = psi_vals / norm if norm > 0 else psi_vals
         
-    # Feature Engineering: Add r^2 to simplify the discovered equation complexity
+    # Feature Engineering: Add physical components to drastically simplify the complexity
     df['r2'] = df['r']**2
+    df['exp_half_r2'] = np.exp(-0.5 * df['r2'])
+    df['cos_n_theta'] = np.cos(df['n'] * df['theta'])
+    df['r_pow_n'] = df['r']**df['n']
     
     # Target scaling to match analytical norms state-by-state
     # This removes state-by-state scale/sign discontinuities for PySR,
@@ -45,27 +48,27 @@ def run_experiment():
         
         df.loc[group.index, 'y_target'] = group['psi_norm'].values * sign * norm_phi
 
-    X = df[['r', 'theta', 'n', 's', 'r2']].values
+    # Provide all physical features to PySR to find the simplest possible expression
+    feature_names = ["r", "theta", "n", "s", "r2", "exp_half_r2", "cos_n_theta", "r_pow_n"]
+    X = df[feature_names].values
     y_target = df['y_target'].values
     
     # 2. Configure Symbolic Regression
     print("Initializing PySR Regressor for multi-state fitting...")
     model = PySRRegressor(
-        variable_names=["r", "theta", "n", "s", "r2"],
-        niterations=1000,
-        populations=60,
-        population_size=60,
-        binary_operators=["+", "*", "-", "/", "^"],
-        unary_operators=["exp", "cos", "sin"],
-        constraints={"^": (-1, 1)},  # Exponents should be simple variables/constants
+        variable_names=feature_names,
+        niterations=500,
+        populations=40,
+        population_size=50,
+        binary_operators=["+", "*", "-", "/"],
+        unary_operators=["exp", "cos"],
         nested_constraints={
-            "cos": {"cos": 0, "sin": 0, "exp": 0},
-            "sin": {"cos": 0, "sin": 0, "exp": 0},
-            "exp": {"cos": 0, "sin": 0, "exp": 0},
+            "cos": {"cos": 0, "exp": 0},
+            "exp": {"cos": 0, "exp": 0},
         },
-        parsimony=0.0001,
-        maxsize=30,
-        timeout_in_seconds=240,
+        parsimony=0.001,
+        maxsize=25,
+        timeout_in_seconds=120,
         parallelism="multiprocessing",
         procs=8,
         verbosity=0,
