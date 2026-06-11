@@ -44,6 +44,14 @@ To set up a new experiment:
 4. Initialize results.tsv: Create results.tsv with the header row.
 5. Kick off experimentation by launching the agent.
 
+# New experiment!
+## main task
+based on the learned functions via Symbolic regression evaluate correlation coeficcient with the Quinteiro's analytical model and the general expression you found for s=3,4,5,6 and n = 1,2,3,4,5,6,7,8,10. 
+
+## what if it does not matches?
+be creative heed the physical constraints in order to modify the symbolic expression to match the True one. Act as an expert in physical mathematics and differential equations to improve the fitting.
+
+
 # Experimentation Constraints
 
 The script runs for a fixed budget (e.g., 5 minutes wall-clock per search) on a single RTX 5090 GPU.
