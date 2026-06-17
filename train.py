@@ -35,12 +35,14 @@ def run_experiment():
     df_train['exp_half_r2'] = np.exp(-0.5 * df_train['r2'])
     df_train['cos_n_theta'] = np.cos(df_train['n'] * df_train['theta'])
     df_train['r_pow_n'] = df_train['r']**df_train['n']
+    df_train['n_eff'] = df_train['n'] + 0.5 * (df_train['n'] == 0)
     
     # Feature Engineering for evaluation
     df_eval['r2'] = df_eval['r']**2
     df_eval['exp_half_r2'] = np.exp(-0.5 * df_eval['r2'])
     df_eval['cos_n_theta'] = np.cos(df_eval['n'] * df_eval['theta'])
     df_eval['r_pow_n'] = df_eval['r']**df_eval['n']
+    df_eval['n_eff'] = df_eval['n'] + 0.5 * (df_eval['n'] == 0)
 
     # Target scaling to match analytical norms state-by-state
     from scipy.special import genlaguerre
@@ -72,7 +74,7 @@ def run_experiment():
         df_train.loc[group.index, 'y_target'] = y_target_state
         df_train.loc[group.index, 'weight'] = divisor**2
 
-    feature_names = ["n", "s", "r2", "cos_n_theta"]
+    feature_names = ["n_eff", "s", "r2", "cos_n_theta"]
     X_train = df_train[feature_names].values
     y_target = df_train['y_target'].values
     weights = df_train['weight'].values
@@ -133,13 +135,13 @@ def run_experiment():
     r2_pysr = evaluate_model(lambda d: model.predict(d[feature_names].values), df_eval)
     
     # Candidate 2: Physical corrected model
-    # cos_n_theta * (1 + s * (r2 - n - 2))
+    # cos_n_theta * (1 + s * (r2 - n_eff - 2))
     def physical_pred(d):
-        n = d['n'].values
+        n_eff = d['n_eff'].values
         s = d['s'].values
         r2 = d['r2'].values
         cos_n_theta = d['cos_n_theta'].values
-        return cos_n_theta * (1.0 + s * (r2 - n - 2.0))
+        return cos_n_theta * (1.0 + s * (r2 - n_eff - 2.0))
         
     r2_physical = evaluate_model(physical_pred, df_eval)
     
@@ -158,7 +160,7 @@ def run_experiment():
     if r2_physical >= r2_pysr:
         best_r2 = r2_physical
         eq_complexity = 11
-        eq_latex = "`$\\psi(r,\\theta)_{s,n}= \\sqrt{\\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n (1 + s(r^2 - n - 2)) \\cos(n\\theta)$`"
+        eq_latex = "`$\\psi(r,\\theta)_{s,n}= \\sqrt{\\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n (1 + s(r^2 - (n + 0.5 \\delta_{n,0}) - 2)) \\cos(n\\theta)$`"
     else:
         best_r2 = r2_pysr
         eq_complexity = best_eq.complexity + 6
