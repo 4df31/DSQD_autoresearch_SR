@@ -54,9 +54,9 @@ def main():
         horizontal_spacing=0.12     # Generous horizontal spacing to prevent y-axis labels and titles overlap
     )
 
-    # 5. Define style colors and markers for premium visual appeal (Modern Sci-Fi theme)
-    color_noiseless = "#00d2ff"  # Electric cyan for continuous line
-    color_noisy = "#ff5e62"      # Neon coral-pink for noisy wavefunction dots
+    # 5. Define style colors and markers for premium visual appeal (Modern Light theme)
+    color_noiseless = "#2563eb"  # Vibrant blue for continuous line
+    color_noisy = "#f43f5e"      # Rose-pink for noisy wavefunction dots
 
     # 6. Add traces for each state
     for idx, row in first_9_states.iterrows():
@@ -103,40 +103,40 @@ def main():
             row=row_idx, col=col_idx
         )
         
-        # Update axes properties with custom spacing, labels, and ticks
+        # Update axes properties with custom spacing, labels, and ticks for light theme
         fig.update_xaxes(
-            title=dict(text="Radius (r)", font=dict(size=11, color="#cbd5e0")),
+            title=dict(text="Radius (r)", font=dict(size=11, color="#1e293b")),
             row=row_idx, col=col_idx,
-            gridcolor="#2d3748",
-            zerolinecolor="#4a5568",
-            tickfont=dict(size=9, color="#a0aec0"),
+            gridcolor="#e2e8f0",
+            zerolinecolor="#cbd5e0",
+            tickfont=dict(size=9, color="#64748b"),
             showgrid=True,
             zeroline=True
         )
         fig.update_yaxes(
-            title=dict(text="R(r)", font=dict(size=11, color="#cbd5e0")),
+            title=dict(text="R(r)", font=dict(size=11, color="#1e293b")),
             row=row_idx, col=col_idx,
-            gridcolor="#2d3748",
-            zerolinecolor="#4a5568",
-            tickfont=dict(size=9, color="#a0aec0"),
+            gridcolor="#e2e8f0",
+            zerolinecolor="#cbd5e0",
+            tickfont=dict(size=9, color="#64748b"),
             showgrid=True,
             zeroline=True
         )
 
-    # 7. Apply a premium dark layout style and ensure no overlaps
+    # 7. Apply a premium light layout style and ensure no overlaps
     fig.update_layout(
         title=dict(
             text="<b>Comparison of Noiseless and Noisy Radial Wavefunctions R(r)</b><br><sup>First 9 Quantum States Ordered by Energy E = 2s + n + 1</sup>",
-            font=dict(size=18, family="Inter, sans-serif", color="#ffffff"),
+            font=dict(size=18, family="Inter, sans-serif", color="#0f172a"),
             x=0.5,
             y=0.96,
             xanchor='center',
             yanchor='top'
         ),
-        template="plotly_dark",
-        paper_bgcolor="#0b0f19",    # Modern deep space background
-        plot_bgcolor="#161e2e",     # Sleek slate gray background for subplots
-        font=dict(family="Inter, sans-serif", color="#e2e8f0"),
+        template="plotly_white",
+        paper_bgcolor="#ffffff",    # Modern white background
+        plot_bgcolor="#ffffff",     # Sleek white background for subplots
+        font=dict(family="Inter, sans-serif", color="#334155"),
         height=1000,
         width=1200,
         margin=dict(l=80, r=40, t=110, b=80),  # Generous margins
@@ -146,8 +146,8 @@ def main():
             y=1.01,
             xanchor="right",
             x=1,
-            font=dict(size=12, color="#ffffff"),
-            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=12, color="#334155"),
+            bgcolor="rgba(255,255,255,0.8)",
             bordercolor="rgba(0,0,0,0)"
         ),
         hovermode="closest"
@@ -155,7 +155,7 @@ def main():
 
     # Clean up and style subplot annotation text to avoid any font size overlap
     for annotation in fig['layout']['annotations']:
-        annotation['font'] = dict(size=12, color="#ffffff", family="Inter, sans-serif")
+        annotation['font'] = dict(size=12, color="#0f172a", family="Inter, sans-serif")
 
     # 8. Save the output plot
     output_html = os.path.join(base_dir, "wavefunctions_comparison.html")

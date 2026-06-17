@@ -220,10 +220,14 @@ def main():
             z=z_data,
             x=[f"n={n}" for n in n_range],
             y=[f"s={s}" for s in s_range],
-            colorscale="Viridis",
+            colorscale=[[0, "#f8fafc"], [0.1, "#dbeafe"], [0.5, "#3b82f6"], [1.0, "#1e3a8a"]],
             text=text_data,
             texttemplate="%{text}",
-            colorbar=dict(title="R²", len=0.3, y=0.85, x=0.45),
+            colorbar=dict(
+                title=dict(text="R²", font=dict(color="#1e293b", size=12)),
+                tickfont=dict(color="#64748b"),
+                len=0.3, y=0.85, x=0.45
+            ),
             showscale=True
         ),
         row=1, col=1
@@ -231,15 +235,15 @@ def main():
 
     # Subplot 2: Bar chart for eigenvalues
     fig.add_trace(
-        go.Bar(name="Analytical", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['Analytical'], marker_color="#1f77b4"),
+        go.Bar(name="Analytical", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['Analytical'], marker_color="#94a3b8"),
         row=1, col=2
     )
     fig.add_trace(
-        go.Bar(name="FEM", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['FEM'], marker_color="#ff7f0e"),
+        go.Bar(name="FEM", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['FEM'], marker_color="#2563eb"),
         row=1, col=2
     )
     fig.add_trace(
-        go.Bar(name="SR Expectation", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['SR'], marker_color="#2ca02c"),
+        go.Bar(name="SR Expectation", x=[f"s={s},n={n}" for s, n in zip(df_ev['s'], df_ev['n'])], y=df_ev['SR'], marker_color="#ea580c"),
         row=1, col=2
     )
 
@@ -250,8 +254,8 @@ def main():
                 x=list(range(1, len(df_hist) + 1)),
                 y=df_hist['best_r2_score'],
                 mode="lines+markers",
-                line=dict(color="#d62728", width=3),
-                marker=dict(size=8),
+                line=dict(color="#4f46e5", width=3),
+                marker=dict(size=8, color="#4f46e5"),
                 hovertext=df_hist['description'],
                 name="Best R² Progress"
             ),
@@ -263,6 +267,8 @@ def main():
                 x=[1],
                 y=[0.971533],
                 mode="lines+markers",
+                line=dict(color="#4f46e5", width=3),
+                marker=dict(size=8, color="#4f46e5"),
                 name="Best R² Progress"
             ),
             row=2, col=1
@@ -289,11 +295,27 @@ def main():
             sr_vals = sr_vals / norm
             
         fig.add_trace(
-            go.Scatter(x=r_vals, y=fem_vals, mode="lines", name=f"FEM s={s_val},n={n_val}", line=dict(dash="solid", width=2)),
+            go.Scatter(
+                x=r_vals,
+                y=fem_vals,
+                mode="lines",
+                name=f"FEM s={s_val},n={n_val}",
+                line=dict(color="#2563eb", dash="solid", width=2.5),
+                legendgroup=f"group_s{s_val}_n{n_val}",
+                showlegend=True
+            ),
             row=r_row, col=r_col
         )
         fig.add_trace(
-            go.Scatter(x=r_vals, y=sr_vals, mode="lines", name=f"SR s={s_val},n={n_val}", line=dict(dash="dash", width=2)),
+            go.Scatter(
+                x=r_vals,
+                y=sr_vals,
+                mode="lines",
+                name=f"SR s={s_val},n={n_val}",
+                line=dict(color="#ea580c", dash="dash", width=2.5),
+                legendgroup=f"group_s{s_val}_n{n_val}",
+                showlegend=True
+            ),
             row=r_row, col=r_col
         )
 
@@ -306,18 +328,32 @@ def main():
     # Update Layout
     fig.update_layout(
         title=dict(
-            text="DSQD Symbolic Regression Autoresearch Verification",
+            text="<b>DSQD Symbolic Regression Autoresearch Verification</b>",
             x=0.5,
-            font=dict(size=22, color="#2c3e50")
+            font=dict(size=22, color="#0f172a", family="Inter, sans-serif")
         ),
         barmode="group",
         height=2000,
         width=1100,
         showlegend=True,
         template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(family="Inter, sans-serif", color="#334155"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=12, color="#334155")
+        ),
         margin=dict(t=140, b=80, l=80, r=80)
     )
+
+    # Style all subplot titles (annotations)
+    for annotation in fig['layout']['annotations']:
+        annotation['font'] = dict(size=13, color="#0f172a", family="Inter, sans-serif")
 
     # Add axis titles
     fig.update_xaxes(title_text="Angular Momentum (n)", row=1, col=1)
@@ -333,6 +369,24 @@ def main():
     fig.update_yaxes(title_text="psi(r)", row=4, col=1)
     fig.update_xaxes(title_text="Radius r", row=4, col=2)
     fig.update_yaxes(title_text="psi(r)", row=4, col=2)
+
+    # Enhanced light theme axis styling for all subplots
+    fig.update_xaxes(
+        gridcolor="#f1f5f9",
+        zerolinecolor="#cbd5e0",
+        tickfont=dict(color="#64748b", size=9),
+        title_font=dict(color="#1e293b", size=11),
+        showgrid=True,
+        zeroline=True
+    )
+    fig.update_yaxes(
+        gridcolor="#f1f5f9",
+        zerolinecolor="#cbd5e0",
+        tickfont=dict(color="#64748b", size=9),
+        title_font=dict(color="#1e293b", size=11),
+        showgrid=True,
+        zeroline=True
+    )
 
     # Save to HTML
     output_html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "visualize.html")
