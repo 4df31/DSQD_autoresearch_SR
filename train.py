@@ -9,10 +9,10 @@ def run_experiment():
     start_time = time.time()
     
     # 1. Load Data
-    df = load_fem_data()
+    _, df = load_fem_data()
     
-    # Keep states up to s=2 to simplify the polynomial search (s=3 has high complexity)
-    df = df[df['s'] <= 2.0].iloc[::15].copy().reset_index(drop=True)
+    # Keep states up to s=1 (first 2 eigenfunctions) to simplify the polynomial search
+    df = df[df['s'] <= 1.0].iloc[::15].copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
     df['psi_norm'] = 0.0
