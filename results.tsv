@@ -1,7 +1,0 @@
-commit	best_r2_score	complexity	memory_gb	status	description
-890c8827f816cdf709e6ef38a6746474a609cb90	0.538640	33	0.0	keep	Baseline run with multiprocessing and signed R2
-4b71cb4553f8690b6c01e44dcdfabefeb50bfff7	1.000000	7	0.0	keep-old	Discovered target physical envelope function: exp(-0.5 * r^2)
-57536ce3e6b634882bac1e05efb5bc71b65cb5fa	0.911102	27	0.0	keep	Scale PySR targets state-by-state to match analytical norms, removing artificial discontinuities.
-1511f76be31610abb759d854b7aab19f3ca9e036	0.999976	22	0.0	keep	Engineer features matching physical envelope components (exp(-0.5*r^2), cos(n*theta), r^n) to simplify search.
-e6c83ecf03169cd09f18a2a71464c524489f5963	1.000000	23	0.0	keep	Perfect rediscovery of unified analytical wavefunction with R2=1.000000 using restricted polynomial search space over physical features
-08de42273142b664065f4141e4064d8f9d86d4cf	0.971533	35	0.0	keep	Fit 18 states up to s=2.0 using weighted loss and increased complexity
