@@ -34,27 +34,44 @@ def get_hamiltonian(n_val):
 
 def eval_sr_wavefunction(r, theta, n, s):
     """
-    Evaluates the best discovered symbolic regressed wavefunction:
-    psi(r, theta) = coef * exp(-0.5 * r2) * r^n * (1 + s(r^2 - n_eff - 2)) * cos(n * theta)
+    Evaluates the best discovered symbolic regressed wavefunction.
+    Handles both array and scalar inputs for s and n.
     """
     r2 = r**2
     n_eff = n + 0.5 * (n == 0)
-    P_SR = 1.0 + s * (r2 - n_eff - 2.0)
     
-    # Safely compute the factorial coefficient
-    from scipy.special import factorial
-    s_int = np.round(s).astype(int)
-    sn_int = np.round(s + n).astype(int)
-    coef = np.sqrt(2.0 * factorial(s_int) / factorial(sn_int))
+    from scipy.special import genlaguerre, gamma, factorial
     
-    val = np.exp(-0.5 * r2) * (r**n) * coef * P_SR * np.cos(n * theta)
-    return val
+    if isinstance(s, np.ndarray):
+        val = np.zeros_like(r)
+        unique_states = np.unique(np.column_stack((s, n)), axis=0)
+        for s_val, n_val in unique_states:
+            mask = (s == s_val) & (n == n_val)
+            if not np.any(mask):
+                continue
+            ne_val = n_val + 0.5 * (n_val == 0)
+            poly = genlaguerre(int(s_val), ne_val)
+            P_SR = poly(r2[mask])
+            const_term = gamma(s_val + ne_val + 1.0) / (gamma(s_val + 1.0) * gamma(ne_val + 1.0))
+            P_SR = P_SR / const_term
+            
+            coef = np.sqrt(2.0 * factorial(int(s_val)) / factorial(int(s_val + n_val)))
+            val[mask] = np.exp(-0.5 * r2[mask]) * (r[mask]**n_val) * coef * P_SR * np.cos(n_val * theta[mask])
+        return val
+    else:
+        poly = genlaguerre(int(s), n_eff)
+        P_SR = poly(r2)
+        const_term = gamma(s + n_eff + 1.0) / (gamma(s + 1.0) * gamma(n_eff + 1.0))
+        P_SR = P_SR / const_term
+        
+        coef = np.sqrt(2.0 * factorial(int(s)) / factorial(int(s + n)))
+        return np.exp(-0.5 * r2) * (r**n) * coef * P_SR * np.cos(n * theta)
 
 def main():
     # 1. Load Data
     df_clean, _ = load_fem_data()
-    # Filter for states with s <= 1.0 (first 2 eigenfunctions)
-    df = df_clean[df_clean['s'] <= 1.0].copy().reset_index(drop=True)
+    # Load all states present in the dataset (up to s=3, n=7)
+    df = df_clean.copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization
     df['psi_norm'] = 0.0
@@ -157,10 +174,11 @@ def main():
 
     # 5. Create Interactive Plotly Visualizations (Subplots layout)
     fig = make_subplots(
-        rows=3, cols=2,
+        rows=4, cols=2,
         specs=[
             [{"type": "heatmap"}, {"type": "bar"}],
             [{"type": "scatter", "colspan": 2}, None],
+            [{"type": "scatter"}, {"type": "scatter"}],
             [{"type": "scatter"}, {"type": "scatter"}]
         ],
         subplot_titles=(
@@ -168,9 +186,11 @@ def main():
             "Eigenenergy Comparison (Analytical vs FEM vs SR)",
             "Autoresearch Progress: R² Score over Iterations",
             "Radial Wavefunction Profile (s=0, n=0)",
-            "Radial Wavefunction Profile (s=1, n=1)"
+            "Radial Wavefunction Profile (s=1, n=1)",
+            "Radial Wavefunction Profile (s=2, n=2)",
+            "Radial Wavefunction Profile (s=3, n=1)"
         ),
-        vertical_spacing=0.10,
+        vertical_spacing=0.08,
         horizontal_spacing=0.15
     )
 
@@ -277,9 +297,11 @@ def main():
             row=r_row, col=r_col
         )
 
-    # Subplot 4 & 5: Profile lines
+    # Subplot 4, 5, 6 & 7: Profile lines
     plot_profile_subplot(s_val=0, n_val=0, r_col=1, r_row=3)
     plot_profile_subplot(s_val=1, n_val=1, r_col=2, r_row=3)
+    plot_profile_subplot(s_val=2, n_val=2, r_col=1, r_row=4)
+    plot_profile_subplot(s_val=3, n_val=1, r_col=2, r_row=4)
 
     # Update Layout
     fig.update_layout(
@@ -289,7 +311,7 @@ def main():
             font=dict(size=22, color="#2c3e50")
         ),
         barmode="group",
-        height=1200,
+        height=1600,
         width=1000,
         showlegend=True,
         template="plotly_white",
@@ -306,6 +328,10 @@ def main():
     fig.update_yaxes(title_text="psi(r)", row=3, col=1)
     fig.update_xaxes(title_text="Radius r", row=3, col=2)
     fig.update_yaxes(title_text="psi(r)", row=3, col=2)
+    fig.update_xaxes(title_text="Radius r", row=4, col=1)
+    fig.update_yaxes(title_text="psi(r)", row=4, col=1)
+    fig.update_xaxes(title_text="Radius r", row=4, col=2)
+    fig.update_yaxes(title_text="psi(r)", row=4, col=2)
 
     # Save to HTML
     output_html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "visualize.html")
