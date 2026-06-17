@@ -190,8 +190,8 @@ def main():
             "Radial Wavefunction Profile (s=2, n=2)",
             "Radial Wavefunction Profile (s=3, n=1)"
         ),
-        vertical_spacing=0.08,
-        horizontal_spacing=0.15
+        vertical_spacing=0.11,
+        horizontal_spacing=0.18
     )
 
     # Subplot 1: Heatmap of wavefunction R2
@@ -311,11 +311,12 @@ def main():
             font=dict(size=22, color="#2c3e50")
         ),
         barmode="group",
-        height=1600,
-        width=1000,
+        height=2000,
+        width=1100,
         showlegend=True,
         template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=140, b=80, l=80, r=80)
     )
 
     # Add axis titles
