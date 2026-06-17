@@ -80,8 +80,7 @@ def run_experiment():
         parsimony=0.000005, # Encourage exact fit for higher complexity
         maxsize=35, # Increase maxsize to fit quadratic Laguerre polynomials
         timeout_in_seconds=260,
-        parallelism="multiprocessing",
-        procs=8,
+        parallelism="serial",
         verbosity=0,
         temp_equation_file=True,
     )
