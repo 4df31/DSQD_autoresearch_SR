@@ -45,11 +45,11 @@ To unify the $n=0$ and $n > 0$ states under a single expression, we engineered t
 
 $$n_{\text{eff}} = n + 0.5 \cdot \delta_{n, 0}$$
 
-Using this feature, the unified polynomial expression for $s \le 1.0$ is:
+Using this feature, the unified polynomial expression is generalized to all states up to $s=3$ by expanding the Laguerre polynomials:
 
-$$P_{SR} = 1 + s(r^2 - n_{\text{eff}} - 2)$$
+$$P_{SR} = 1 - \frac{s r^2}{n_{\text{eff}}+1} + \frac{s(s-1) r^4}{2(n_{\text{eff}}+1)(n_{\text{eff}}+2)} - \frac{s(s-1)(s-2) r^6}{6(n_{\text{eff}}+1)(n_{\text{eff}}+2)(n_{\text{eff}}+3)}$$
 
-Evaluating this unified expression on the clean FEM wavefunctions achieves a practically perfect fit with **$R^2 = 0.99999928$**!
+Evaluating this unified expression on the clean FEM wavefunctions across all 20 states achieves an outstanding fit with **$R^2 = 0.99999695$**!
 
 ---
 
@@ -62,7 +62,8 @@ The symbolic regression search history was logged in [results.tsv](file:///works
 | `fa9f45d` | 0.983892 | 27 | **keep** | Configured serial parallelism in PySR to prevent Julia `Distributed` worker crashes. |
 | `54418e7` | 0.978684 | 17 | **discard** | Restricted PySR `maxsize` to 15 and increased `parsimony` to 0.001. $R^2$ decreased because the model was prevented from overfitting the noisy dataset. |
 | `9c583ba` | 0.994408 | 17 | **keep** | Switched evaluation harness to the clean dataset (as noise is unpredictable, making clean dataset evaluation necessary to verify the true physical expression). |
-| `e809eb2` | 0.999999 | 11 | **keep** | Engineered the `n_eff` feature to account for the $n=0$ centrifugal simplification. Successfully discovered the exact physical equation. |
+| `e809eb2` | 0.999999 | 11 | **keep** | Engineered the `n_eff` feature to account for the $n=0$ centrifugal simplification. Successfully discovered the exact physical equation for $s \le 1.0$. |
+| `c219a98` | 0.999997 | 21 | **keep** | Expanded and fitted all 20 eigenfunctions (up to $s=3$) using the unified Laguerre polynomial expression with $n_{\text{eff}}$ confinement correction. |
 
 ---
 
@@ -70,11 +71,11 @@ The symbolic regression search history was logged in [results.tsv](file:///works
 
 The final unified analytical expression for the DSQD envelope wavefunction is:
 
-$$\psi(r,\theta)_{s,n}= \sqrt{\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n (1 + s(r^2 - (n + 0.5 \delta_{n,0}) - 2)) \cos(n\theta)$$
+$$\psi(r,\theta)_{s,n}= \sqrt{\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n \left( \sum_{k=0}^s \binom{s}{k} \frac{(-r^2)^k}{(n_{\text{eff}} + 1)_k} \right) \cos(n\theta)$$
 
-- **Overall Wavefunction Fit ($R^2$)**: `0.999999`
+- **Overall Wavefunction Fit ($R^2$)**: `0.999997`
 - **Eigenenergy Correlation ($R^2$)**: `1.000000`
-- **Model Complexity**: `11`
+- **Model Complexity**: `21`
 
 ---
 
