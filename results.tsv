@@ -1,0 +1,5 @@
+commit	best_r2_score	complexity	memory_gb	status	description
+fa9f45d	0.983892	27	0.0	keep	use serial parallelism to avoid Distributed crashes
+54418e7	0.978684	17	0.0	discard	restrict maxsize to 15 and increase parsimony to 0.001
+9c583ba	0.994408	17	0.0	keep	implement clean evaluation and physical corrected model comparison
+e809eb2	0.999999	11	0.0	keep	engineer n_eff feature to unify n=0 and n>0 states, achieving R2=0.999999
