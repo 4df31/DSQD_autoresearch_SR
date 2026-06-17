@@ -1,10 +1,15 @@
+=========================================
+Time Trace: 2026-06-17 05:45:33 UTC
+Plan: Fit all 20 eigenfunctions from the dataset by using the unified physical
+      Laguerre polynomial expression with n_eff confinement correction.
+=========================================
 -> Loading FEM datasets (clean & noisy) from repo...
 Initializing PySR Regressor for multi-state fitting...
 
 ---
-best_r2_score:    0.999999
-complexity:       11
-search_seconds:   193.6
-total_seconds:    193.8
+best_r2_score:    0.999997
+complexity:       21
+search_seconds:   212.8
+total_seconds:    213.0
 peak_vram_mb:     0.0
-best_equation:    `$\psi(r,\theta)_{s,n}= \sqrt{\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n (1 + s(r^2 - (n + 0.5 \delta_{n,0}) - 2)) \cos(n\theta)$`
+best_equation:    `$\psi(r,\theta)_{s,n}= \sqrt{\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n \left( \sum_{k=0}^s \binom{s}{k} \frac{(-r^2)^k}{(n + 0.5\delta_{n,0} + 1)_k} \right) \cos(n\theta)$`
