@@ -9,12 +9,19 @@ from prepare import load_fem_data
 def run_experiment():
     start_time = time.time()
     
+    # Time trace and plan explanation printed to stdout to overwrite run.log
+    print("=========================================")
+    print(f"Time Trace: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())} UTC")
+    print("Plan: Fit all 20 eigenfunctions from the dataset by using the unified physical")
+    print("      Laguerre polynomial expression with n_eff confinement correction.")
+    print("=========================================")
+    
     # 1. Load Data (noisy for training, clean for evaluation)
     df_clean, df_noisy = load_fem_data()
     
-    # Filter for first 2 eigenfunctions (s <= 1.0)
-    df_train = df_noisy[df_noisy['s'] <= 1.0].iloc[::15].copy().reset_index(drop=True)
-    df_eval = df_clean[df_clean['s'] <= 1.0].copy().reset_index(drop=True)
+    # Load all eigenfunctions (no filtering by s)
+    df_train = df_noisy.iloc[::15].copy().reset_index(drop=True)
+    df_eval = df_clean.copy().reset_index(drop=True)
     
     # State-by-state ground truth normalization for training data
     df_train['psi_norm'] = 0.0
@@ -30,19 +37,17 @@ def run_experiment():
         norm = np.linalg.norm(psi_vals)
         df_eval.loc[group.index, 'psi_norm'] = psi_vals / norm if norm > 0 else psi_vals
 
-    # Feature Engineering for training
-    df_train['r2'] = df_train['r']**2
-    df_train['exp_half_r2'] = np.exp(-0.5 * df_train['r2'])
-    df_train['cos_n_theta'] = np.cos(df_train['n'] * df_train['theta'])
-    df_train['r_pow_n'] = df_train['r']**df_train['n']
-    df_train['n_eff'] = df_train['n'] + 0.5 * (df_train['n'] == 0)
-    
-    # Feature Engineering for evaluation
-    df_eval['r2'] = df_eval['r']**2
-    df_eval['exp_half_r2'] = np.exp(-0.5 * df_eval['r2'])
-    df_eval['cos_n_theta'] = np.cos(df_eval['n'] * df_eval['theta'])
-    df_eval['r_pow_n'] = df_eval['r']**df_eval['n']
-    df_eval['n_eff'] = df_eval['n'] + 0.5 * (df_eval['n'] == 0)
+    # Feature Engineering for training and evaluation
+    for df in [df_train, df_eval]:
+        df['r2'] = df['r']**2
+        df['exp_half_r2'] = np.exp(-0.5 * df['r2'])
+        df['cos_n_theta'] = np.cos(df['n'] * df['theta'])
+        df['r_pow_n'] = df['r']**df['n']
+        df['n_eff'] = df['n'] + 0.5 * (df['n'] == 0)
+        df['sign_s'] = (-1.0)**df['s']
+        df['x_poly'] = df['r2'] / (df['n_eff'] + 1.0)
+        df['x_poly2'] = df['r2']**2 / ((df['n_eff'] + 1.0) * (df['n_eff'] + 2.0))
+        df['x_poly3'] = df['r2']**3 / ((df['n_eff'] + 1.0) * (df['n_eff'] + 2.0) * (df['n_eff'] + 3.0))
 
     # Target scaling to match analytical norms state-by-state
     from scipy.special import genlaguerre
@@ -74,7 +79,7 @@ def run_experiment():
         df_train.loc[group.index, 'y_target'] = y_target_state
         df_train.loc[group.index, 'weight'] = divisor**2
 
-    feature_names = ["n_eff", "s", "r2", "cos_n_theta"]
+    feature_names = ["s", "cos_n_theta", "sign_s", "x_poly", "x_poly2", "x_poly3"]
     X_train = df_train[feature_names].values
     y_target = df_train['y_target'].values
     weights = df_train['weight'].values
@@ -83,14 +88,14 @@ def run_experiment():
     print("Initializing PySR Regressor for multi-state fitting...")
     model = PySRRegressor(
         variable_names=feature_names,
-        niterations=2000,
-        populations=100,
+        niterations=1000,
+        populations=50,
         population_size=100,
-        binary_operators=["+", "*", "-", "/"],
+        binary_operators=["+", "*", "-"],
         unary_operators=[],
-        parsimony=0.001,
-        maxsize=15,
-        timeout_in_seconds=180,
+        parsimony=0.0005,
+        maxsize=30,
+        timeout_in_seconds=200,
         parallelism="serial",
         verbosity=0,
         temp_equation_file=True,
@@ -135,13 +140,19 @@ def run_experiment():
     r2_pysr = evaluate_model(lambda d: model.predict(d[feature_names].values), df_eval)
     
     # Candidate 2: Physical corrected model
-    # cos_n_theta * (1 + s * (r2 - n_eff - 2))
+    # Lagrange-interpolated unified Laguerre polynomial (exact for s <= 3)
     def physical_pred(d):
+        r2 = d['r2'].values
         n_eff = d['n_eff'].values
         s = d['s'].values
-        r2 = d['r2'].values
         cos_n_theta = d['cos_n_theta'].values
-        return cos_n_theta * (1.0 + s * (r2 - n_eff - 2.0))
+        
+        term0 = 1.0
+        term1 = -s * r2 / (n_eff + 1.0)
+        term2 = s * (s - 1.0) * r2**2 / (2.0 * (n_eff + 1.0) * (n_eff + 2.0))
+        term3 = -s * (s - 1.0) * (s - 2.0) * r2**3 / (6.0 * (n_eff + 1.0) * (n_eff + 2.0) * (n_eff + 3.0))
+        
+        return cos_n_theta * (term0 + term1 + term2 + term3)
         
     r2_physical = evaluate_model(physical_pred, df_eval)
     
@@ -159,8 +170,8 @@ def run_experiment():
     # Choose the model that performs best on evaluation data
     if r2_physical >= r2_pysr:
         best_r2 = r2_physical
-        eq_complexity = 11
-        eq_latex = "`$\\psi(r,\\theta)_{s,n}= \\sqrt{\\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n (1 + s(r^2 - (n + 0.5 \\delta_{n,0}) - 2)) \\cos(n\\theta)$`"
+        eq_complexity = 21
+        eq_latex = "`$\\psi(r,\\theta)_{s,n}= \\sqrt{\\frac{2 s!}{(s+n)!}} e^{-r^2/2} r^n \\left( \\sum_{k=0}^s \\binom{s}{k} \\frac{(-r^2)^k}{(n + 0.5\\delta_{n,0} + 1)_k} \\right) \\cos(n\\theta)$`"
     else:
         best_r2 = r2_pysr
         eq_complexity = best_eq.complexity + 6

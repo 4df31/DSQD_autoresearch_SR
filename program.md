@@ -11,7 +11,7 @@ For disk-shaped quantum dots (DSQDs), the real in-plane envelope wavefunction $\
 
 The continuous automated research loop is responsible for refining the following workflow:
 
-- Symbolic Search: train.py loads the dataset (use extrictly the file `fem_dsqd_data_noisy.csv` ), filters for the first 2 eigenfunctions (varying $s$ and $n$ in a suitable way), normalizes the wavefunctions state-by-state, and uses PySR to propose unified mathematical models of `$\psi(r,\theta)$_{n,s}$`.
+- Symbolic Search: train.py loads the dataset (use extrictly the file `fem_dsqd_data_noisy.csv` ), analyze all of the eigenfunctions (varying $s$ and $n$ in a suitable way), normalizes the wavefunctions state-by-state, and uses PySR to propose unified mathematical models of `$\psi(r,\theta)$_{n,s}$`. Make sure that you trained the symbolic regression only with the functions of the dataset.
 
 - Evaluation: Evaluate the proposed unified function against the state-by-state normalized dataset, aligning the sign of each state's prediction and computing the overall $R^2$ score.
 
@@ -19,6 +19,7 @@ The continuous automated research loop is responsible for refining the following
 
 - Verify data exists: Check that `fem_dsqd_data.csv` is present in the repository. If datasets files are not present notify the human
 - Initialize results.tsv: Create results.tsv with the header row.
+- update the log file using a time trace and overwrite the file each time. add a little comment to each log explaining your plan.
 
 
 ### what if it does not matches?
