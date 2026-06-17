@@ -1,54 +1,27 @@
 # Autoresearch: DSQD Symbolic Regression
-
 This is an experiment to have an LLM autonomously conduct research. The specific objective of this run is to perform multi-state symbolic regression to rediscover the unified analytical wavefunction expression of the envelope functions for disk-shaped quantum dots (DSQD) under isotropic harmonic confinement, varying both radial quantum number $s$ and angular momentum quantum number $n$.
 
-The ultimate goal is to find the unified multi-state expression that fits all four target states ($s \in \{0, 1\}$ and $n \in \{0, 1\}$) simultaneously.
+The ultimate goal is to find the unified multi-state expression that fits all target states  present in the experimental FEM datasets for different values of $s$ and $n$ simultaneously.
 
 ## Analytical Model (Target Expression)
 
-For disk-shaped quantum dots (DSQDs), the real in-plane envelope wavefunction $\psi(r, \theta, n, s)$ under isotropic confinement frequency $\omega = 1$ is represented numerically.
-
-Due to numerical discretization at $r \to 0$, the centrifugal term $-0.25/(2r^2)$ is omitted for $n = 0$, while for $n = 1$ the centrifugal potential $+0.75/(2r^2)$ is included. This modifies the $(s=1, n=0)$ radial state slightly. 
-
-The resulting 4 wavefunctions corresponding to the first 2 eigenfunctions varying $s \in \{0, 1\}$ and $n \in \{0, 1\}$ have the following exact forms:
-1. $s=0, n=0: \psi \propto e^{-0.5 r^2}$
-2. $s=1, n=0: \psi \propto (1 - \frac{2}{3} r^2) e^{-0.5 r^2}$
-3. $s=0, n=1: \psi \propto r e^{-0.5 r^2} \cos(\theta)$
-4. $s=1, n=1: \psi \propto r (2 - r^2) e^{-0.5 r^2} \cos(\theta)$
-
-These four states can be unified into a single analytical expression of $r$, $\theta$, $n$, and $s$:
-
-$$\psi(r, \theta, n, s) = N_{sn} e^{-0.5 r^2} r^n \left( 1 + s \left( n - \frac{n+2}{3} r^2 \right) \right) \cos(n \theta)$$
-
-where $N_{sn}$ is a state-dependent normalization constant.
+For disk-shaped quantum dots (DSQDs), the real in-plane envelope wavefunction $\psi(r, \theta, n, s)$ under isotropic confinement frequency $\omega = 1$ is represented numerically in the datasets.
 
 ## Procedure
 
 The continuous automated research loop is responsible for refining the following workflow:
 
-- Data Generation: prepare.py generates a dataset for the first 20 eigenfunctions (varying $s$ and $n$ quantum numbers up to energy level $E=8$) and caches them directly in the repository as `fem_dsqd_data.csv`. This ensures numerical results are allocated inside the repository instead of being regenerated each time.
-
-- Symbolic Search: train.py loads the dataset, filters for the first 2 eigenfunctions (varying $s \in \{0, 1\}$ and $n \in \{0, 1\}$), normalizes the wavefunctions state-by-state, and uses PySR to propose unified mathematical models of $r$, $\theta$, $n$, and $s$.
+- Symbolic Search: train.py loads the dataset, filters for the first 2 eigenfunctions (varying $s$ and $n$ in a suitable way), normalizes the wavefunctions state-by-state, and uses PySR to propose unified mathematical models of `$\psi(r,\theta)$_{n,s}$`.
 
 - Evaluation: Evaluate the proposed unified function against the state-by-state normalized dataset, aligning the sign of each state's prediction and computing the overall $R^2$ score.
 
 - Iteration: Loop the symbolic regression search until the discovered expressions match the unified physical expression (Target $R^2 \approx 1.0$).
 
-# Setup (Human-in-the-Loop)
+- Verify data exists: Check that `fem_dsqd_data.csv` is present in the repository. If datasets files are not present notify the human
+- Initialize results.tsv: Create results.tsv with the header row.
 
-To set up a new experiment:
 
-1. Agree on a run tag (e.g., dsqd-mar5).
-2. Create branch: git checkout -b autoresearch/<tag>.
-3. Verify data exists: Check that `fem_dsqd_data.csv` is present in the repository. If not, run python prepare.py to generate it.
-4. Initialize results.tsv: Create results.tsv with the header row.
-5. Kick off experimentation by launching the agent.
-
-# New experiment!
-## main task
-based on the learned functions via Symbolic regression evaluate correlation coeficcient with the Quinteiro's analytical model and the general expression you found for s=3,4,5,6 and n = 1,2,3,4,5,6,7,8,10. 
-
-## what if it does not matches?
+### what if it does not matches?
 be creative heed the physical constraints in order to modify the symbolic expression to match the True one. Act as an expert in physical mathematics and differential equations to improve the fitting.
 
 
@@ -77,7 +50,7 @@ complexity:       21
 search_seconds:   300.1
 total_seconds:    315.4
 peak_vram_mb:     12040.2
-best_equation:    "exp(-0.5 * r^2) * (r^n) * (1.0 + s * (n - (n+2)/3.0 * r^2)) * cos(n * theta)"
+best_equation:    "`$\psi(r,\theta)_{s,n}$= <LaTeX-format written equation>`"
 
 
 Log the results to results.tsv:
@@ -108,7 +81,7 @@ If performance is worse: git reset --hard HEAD~1 back to where you started.
 
 NEVER STOP: You are autonomous. If you run out of ideas, try different basis functions (e.g., add sqrt, besselj to PySR), adjust parsimony, or regress the logarithm of the wavefunction. The loop runs until human interruption.
 
-Hardware and Environment
+## Hardware and Environment
 
 Host: Nvidia GeForce RTX 5090, Intel Core Ultra 9-258, 64GB RAM, Fedora Linux 44.
 
@@ -140,6 +113,6 @@ To maximize GPU/VRAM acceleration during symbolic regression training:
 To visualize search performance and contrast numerical results:
 - Run [visualize.py](file:///home/QUCIT/adrian/ML/DSQD_autoresearch_SR/visualize.py) to compute and plot:
   - An interactive 2D heatmap of the wavefunction $R^2$ scores depending on the radial quantum number $s$ and angular momentum $n$.
-  - A comparative group bar chart for the eigenenergies contrasting **Analytical** ($E = 2s + n + 1$), **FEM** (numerical eigenvalues), and **SR** (the expectation values of the Hamiltonian $\langle \psi_{SR} | \hat{H} | \psi_{SR} \rangle$ computed using the symbolic-regressed wavefunctions).
+  - A comparative group bar chart for the eigenenergies contrasting **Analytical**, **FEM** (numerical eigenvalues), and **SR** (the expectation values of the Hamiltonian $\langle \psi_{SR} | \hat{H} | \psi_{SR} \rangle$ computed using the symbolic-regressed wavefunctions).
   - A progress line chart showing the progress of $R^2$ across the iterations.
   - The overall $R^2$ correlation score of the set of all eigenvalues (FEM vs SR).
